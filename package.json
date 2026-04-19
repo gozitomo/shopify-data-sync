@@ -1,33 +1,7 @@
 {
-  "name": "shopify-data-sync",
-  "version": "1.0.0",
-  "description": "sync shopify data to firestore",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Errror: no test specified\" && exit1",
-    "sync:orders": "tsx src/orders-data-sync.ts",
-    "sync:products": "tsx src/products-data-sync.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/gozitomo/shopify-data-sync.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "bugs": {
-    "url": "https://github.com/gozitomo/shopify-data-sync/issues"
-  },
-  "homepage": "https://github.com/gozitomo/shopify-data-sync#readme",
-  "dependencies": {
-    "@google-cloud/firestore": "^8.5.0",
-    "dotenv": "^17.4.2"
-  },
-  "devDependencies": {
-    "@types/node": "^25.6.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
-  }
+  "name": "shopify-data-sync-root",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
 }
