@@ -3,5 +3,13 @@
   "private": true,
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "test": "npm --prefix packages/shared run build && vitest run tests/unit",
+    "test:all": "npm --prefix packages/shared run build && vitest run",
+    "test:integration": "npm --prefix packages/shared run build && RUN_INTEGRATION=1 vitest run tests/integration"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
 }

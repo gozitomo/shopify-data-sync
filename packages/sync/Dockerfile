@@ -1,14 +1,16 @@
 # Node.js 軽量イメージ
 FROM node:20-slim
 WORKDIR /app
+
 COPY package*.json ./
 
-RUN npm install
+# workspace 依存(@shopify-data-sync/shared)は esbuild で dist にバンドル済みなので、
+# Docker では package.json から除外して npm レジストリを見に行かないようにする。
+RUN npm pkg delete dependencies.@shopify-data-sync/shared \
+ && npm install --omit=dev
 
-COPY . .
+# バンドル済みの実行ファイル（deploy 前に npm run build で生成しておく）
+COPY dist ./dist
 
-# Jobsを使用するためポートは不要
-# EXPOSE 8080
-
-# 実行コマンドはCloud Run Jobsの設定で上書きする
-CMD ["npm", "run", "sync:orders"]
+# 既定は注文同期。商品同期ジョブは Cloud Run 側で command/args を上書きする。
+CMD ["node", "dist/orders-data-sync.cjs"]

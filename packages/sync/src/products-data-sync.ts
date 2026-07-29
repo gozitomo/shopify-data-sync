@@ -1,13 +1,13 @@
 import { Firestore } from "@google-cloud/firestore";
 import * as dotenv from "dotenv";
-import { getShopifyToken } from "./get-tmp-token.js";
+import { getShopifyToken } from "@shopify-data-sync/shared";
 
 dotenv.config();
 
 const projectId = process.env.PROJECT_ID || "";
 const db = new Firestore({
   projectId: projectId,
-  databaseId: "shopify-order-data",
+  databaseId: "shopify-data",
 });
 
 async function testShopify() {

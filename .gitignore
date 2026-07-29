@@ -140,3 +140,10 @@ vite.config.ts.timestamp-*
 
 # .DS_Store
 .DS_Store
+
+# 出荷CSV(個人情報を含むためコミット禁止)
+packages/sync/unfulfilled-*.csv
+packages/sync/b2-*.csv
+
+# その場限りのスクラッチスクリプト
+**/*.local.ts

@@ -1,13 +1,13 @@
 import { Firestore } from "@google-cloud/firestore";
 import * as dotenv from "dotenv";
-import { getShopifyToken } from "./get-tmp-token.js";
+import { getShopifyToken } from "@shopify-data-sync/shared";
 
 dotenv.config();
 
 const projectId = process.env.PROJECT_ID || "";
 const db = new Firestore({
   projectId: projectId,
-  databaseId: "shopify-order-data",
+  databaseId: "shopify-data",
 });
 
 async function testShopify() {
@@ -24,7 +24,7 @@ async function testShopify() {
 
   const variables = {
     cursor: null,
-    queryStr: "created_at:>=2026-01-01",
+    queryStr: "created_at:>=2022-01-01",
   };
 
   try {
@@ -38,6 +38,7 @@ async function testShopify() {
                   id
                   name
                   createdAt
+                  cancelledAt
                   lineItems(first: 50) {
                     edges {
                       node {
@@ -132,7 +133,8 @@ async function testShopify() {
           const docId = cleanId(
             `${order.createdAt}#${order.id}#${item.id}#UNFULFILLED`,
           );
-          if (item.unfulfilledQuantity > 0) {
+          // キャンセル注文は引当を持たない（Shopify で在庫は解放済み）。
+          if (!order.cancelledAt && item.unfulfilledQuantity > 0) {
             await db
               .collection("orders")
               .doc(docId)
@@ -148,7 +150,7 @@ async function testShopify() {
               });
             totalProcessed++;
           } else {
-            // 完納済みなら削除
+            // 完納済み or キャンセル済みなら引当レコードを削除
             await db.collection("orders").doc(docId).delete();
           }
         }

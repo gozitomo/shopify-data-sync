@@ -1,0 +1,11 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/pgfarm-dashboard-493812/cloud-run-source-deploy/shopify-dispatcher:latest"
+      - "-f"
+      - "packages/dispatcher/Dockerfile"
+      - "."
+images:
+  - "asia-northeast1-docker.pkg.dev/pgfarm-dashboard-493812/cloud-run-source-deploy/shopify-dispatcher:latest"

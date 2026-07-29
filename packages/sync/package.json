@@ -5,8 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Errror: no test specified\" && exit1",
+    "build": "esbuild src/orders-data-sync.ts src/products-data-sync.ts --bundle --platform=node --target=node20 --format=cjs --outdir=dist --out-extension:.js=.cjs --external:@google-cloud/firestore --external:iconv-lite --external:dotenv",
     "sync:orders": "tsx src/orders-data-sync.ts",
-    "sync:products": "tsx src/products-data-sync.ts"
+    "sync:products": "tsx src/products-data-sync.ts",
+    "export:unfulfilled": "tsx src/export-unfulfilled-csv.ts",
+    "export:b2": "tsx src/export-b2-csv.ts"
   },
   "repository": {
     "type": "git",
@@ -22,10 +25,13 @@
   "homepage": "https://github.com/gozitomo/shopify-data-sync#readme",
   "dependencies": {
     "@google-cloud/firestore": "^8.5.0",
-    "dotenv": "^17.4.2"
+    "@shopify-data-sync/shared": "*",
+    "dotenv": "^17.4.2",
+    "iconv-lite": "^0.4.24"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "esbuild": "^0.20.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.2"
