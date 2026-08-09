@@ -3,6 +3,23 @@ import { toJapanesePrefecture } from "./prefecture.js";
 import { B2_COLUMNS } from "./b2-columns.js";
 import { getSkuCategory } from "./sku.js";
 import { normalizePhone } from "./phone.js";
+// 全角カタカナ→半角カタカナ変換テーブル
+const ZEN_TO_HAN: Record<string, string> = {
+  'ァ':'ｧ','ア':'ｱ','ィ':'ｨ','イ':'ｲ','ゥ':'ｩ','ウ':'ｳ','ェ':'ｪ','エ':'ｴ',
+  'ォ':'ｫ','オ':'ｵ','カ':'ｶ','ガ':'ｶﾞ','キ':'ｷ','ギ':'ｷﾞ','ク':'ｸ','グ':'ｸﾞ',
+  'ケ':'ｹ','ゲ':'ｹﾞ','コ':'ｺ','ゴ':'ｺﾞ','サ':'ｻ','ザ':'ｻﾞ','シ':'ｼ','ジ':'ｼﾞ',
+  'ス':'ｽ','ズ':'ｽﾞ','セ':'ｾ','ゼ':'ｾﾞ','ソ':'ｿ','ゾ':'ｿﾞ','タ':'ﾀ','ダ':'ﾀﾞ',
+  'チ':'ﾁ','ヂ':'ﾁﾞ','ッ':'ｯ','ツ':'ﾂ','ヅ':'ﾂﾞ','テ':'ﾃ','デ':'ﾃﾞ','ト':'ﾄ',
+  'ド':'ﾄﾞ','ナ':'ﾅ','ニ':'ﾆ','ヌ':'ﾇ','ネ':'ﾈ','ノ':'ﾉ','ハ':'ﾊ','バ':'ﾊﾞ',
+  'パ':'ﾊﾟ','ヒ':'ﾋ','ビ':'ﾋﾞ','ピ':'ﾋﾟ','フ':'ﾌ','ブ':'ﾌﾞ','プ':'ﾌﾟ','ヘ':'ﾍ',
+  'ベ':'ﾍﾞ','ペ':'ﾍﾟ','ホ':'ﾎ','ボ':'ﾎﾞ','ポ':'ﾎﾟ','マ':'ﾏ','ミ':'ﾐ','ム':'ﾑ',
+  'メ':'ﾒ','モ':'ﾓ','ャ':'ｬ','ヤ':'ﾔ','ュ':'ｭ','ユ':'ﾕ','ョ':'ｮ','ヨ':'ﾖ',
+  'ラ':'ﾗ','リ':'ﾘ','ル':'ﾙ','レ':'ﾚ','ロ':'ﾛ','ワ':'ﾜ','ヲ':'ｦ','ン':'ﾝ',
+  'ヴ':'ｳﾞ','ー':'ｰ','。':'｡','「':'｢','」':'｣','、':'､','・':'･',
+};
+function toHanKana(s: string): string {
+  return s.replace(/[ァ-ヴー。「」、・]/g, (ch) => ZEN_TO_HAN[ch] ?? ch);
+}
 
 const API_VERSION = "2026-01";
 const COLUMN_COUNT = 95;
@@ -79,7 +96,7 @@ function nameUpToKg(name: string): string {
 function buildToAddress(addr: any): string {
   if (!addr) return "";
   const province = addr.province ? toJapanesePrefecture(addr.province) : "";
-  return `${province}${addr.city ?? ""}${addr.address1 ?? ""}`.trim();
+  return `${province}${addr.city ?? ""}${toHanKana(addr.address1 ?? "")}`.trim();
 }
 
 function gidToId(gid: string): string {
@@ -87,9 +104,12 @@ function gidToId(gid: string): string {
 }
 
 function today(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 /**
