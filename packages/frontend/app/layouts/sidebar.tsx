@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   ScanLine,
+  Settings,
   Star,
   X,
 } from "lucide-react";
@@ -29,9 +30,9 @@ const navItems = [
     icon: FileDown,
     end: false,
   },
-  // { to: "/import-shipments", label: "出荷データ取込", icon: Upload, end: false },
   { to: "/shipped", label: "出荷実績", icon: ClipboardList, end: false },
   { to: "/peach-survey", label: "桃アンケート", icon: Star, end: false },
+  { to: "/settings", label: "設定", icon: Settings, end: false },
 ];
 
 export default function SidebarLayout() {

@@ -10,7 +10,6 @@ export {
   type B2Filters,
   type CoolMode,
 } from "./b2-csv.js";
-export { buildStickerCsv, type ShipmentRow } from "./sticker-csv.js";
 export {
   type PeachSurveyRecord,
   type PeachRatingField,

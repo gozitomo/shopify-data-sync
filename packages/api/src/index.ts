@@ -14,7 +14,6 @@ import { defineSecret } from "firebase-functions/params";
 import {
   buildUnfulfilledCsv,
   buildB2Csv,
-  buildStickerCsv,
   getSkuCategory,
   type SenderInfo,
   fetchPeachSurveyRows,
@@ -81,6 +80,44 @@ async function requireAuth(req: Request, res: Response, next: NextFunction) {
       return;
     }
     next();
+  } catch {
+    res.status(401).json({ error: "トークンが無効です" });
+  }
+}
+
+// 桃アンケート共有ページの許可リストは Firestore `peach_viewers`
+// （ドキュメントID = メールアドレス小文字）で管理する。設定画面から登録・削除する。
+const PEACH_VIEWERS = "peach_viewers";
+
+// 桃アンケート用: 許可ドメイン or 許可リスト(Firestore)のユーザーだけ通す（少しだけ緩い）
+async function requirePeachViewer(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const match = (req.headers.authorization || "").match(/^Bearer (.+)$/);
+  if (!match) {
+    res.status(401).json({ error: "認証が必要です" });
+    return;
+  }
+  try {
+    const decoded = await getAuth().verifyIdToken(match[1]);
+    const email = (decoded.email ?? "").toLowerCase();
+    if (!decoded.email_verified) {
+      res.status(403).json({ error: "閲覧権限がありません" });
+      return;
+    }
+    // ドメイン所属なら即OK。それ以外は Firestore の許可リストを確認。
+    if (email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      next();
+      return;
+    }
+    const doc = await db.collection(PEACH_VIEWERS).doc(email).get();
+    if (doc.exists) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "閲覧権限がありません" });
   } catch {
     res.status(401).json({ error: "トークンが無効です" });
   }
@@ -204,13 +241,81 @@ app.get("/api/stats", requireAuth, async (req: Request, res: Response) => {
 // 桃アンケートの回答を品種ごとに集計（件数・各評価軸の平均）
 app.get(
   "/api/peach-survey-summary",
-  requireAuth,
+  requirePeachViewer,
   async (req: Request, res: Response) => {
     try {
       // データ源は Google スプレッドシート（Slackフォームの回答）。
       const rows = await fetchPeachSurveyRows();
       const varieties = summarizePeachSurvey(parsePeachSurveyRows(rows));
       res.json({ varieties });
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// 桃アンケート共有ユーザー(許可リスト)の管理 — 社内(ドメイン)のみ操作可
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+app.get(
+  "/api/peach-viewers",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const snap = await db.collection(PEACH_VIEWERS).get();
+      const viewers = snap.docs
+        .map((d) => ({
+          email: d.id,
+          addedAt: (d.data() as any).addedAt?.toDate?.()?.toISOString() ?? null,
+        }))
+        .sort((a, b) => a.email.localeCompare(b.email));
+      res.json({ viewers });
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.post(
+  "/api/peach-viewers",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email ?? "")
+        .trim()
+        .toLowerCase();
+      if (!EMAIL_RE.test(email)) {
+        res.status(400).json({ error: "メールアドレスの形式が正しくありません" });
+        return;
+      }
+      await db
+        .collection(PEACH_VIEWERS)
+        .doc(email)
+        .set({ email, addedAt: new Date() }, { merge: true });
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/peach-viewers",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email ?? "")
+        .trim()
+        .toLowerCase();
+      if (!email) {
+        res.status(400).json({ error: "email が必要です" });
+        return;
+      }
+      await db.collection(PEACH_VIEWERS).doc(email).delete();
+      res.json({ ok: true });
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -420,14 +525,14 @@ app.post("/api/export-b2", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-// 発行済みデータ取込: 伝票番号を台帳に記録し、シール用CSVを返す
+
+// B2発行済みCSV取込: 伝票番号をFirestoreに記録（シールCSVは生成しない）
 app.post(
-  "/api/sticker-csv",
+  "/api/import-b2",
   requireAuth,
   async (req: Request, res: Response) => {
     try {
       const raw = Array.isArray(req.body?.rows) ? req.body.rows : [];
-      // FO idごとに最新の伝票番号で集約（再発行は最後を採用）
       const byFo = new Map<
         string,
         { foId: string; tracking: string; orderName: string }
@@ -447,7 +552,7 @@ app.post(
         return;
       }
 
-      // 既存statusを取得（発送済み fulfilled は labeled に戻さない）
+      // 既存statusを取得（発送済みは labeled に戻さない）
       const statusByFo = new Map<string, string | undefined>();
       for (let i = 0; i < rows.length; i += 300) {
         const refs = rows
@@ -457,21 +562,17 @@ app.post(
         for (const s of snaps) statusByFo.set(s.id, s.data()?.status);
       }
 
-      // 伝票番号が空の行は取込失敗（labeled にできない）。例外として集める。
-      const failed: { foId: string; tracking: string; orderName: string }[] = [];
+      // 伝票番号が空の行は失敗扱い
+      const failed: { foId: string; orderName: string }[] = [];
       const valid = rows.filter((r) => {
         if (!r.tracking) {
-          failed.push({
-            foId: r.foId,
-            tracking: r.tracking,
-            orderName: r.orderName,
-          });
+          failed.push({ foId: r.foId, orderName: r.orderName });
           return false;
         }
         return true;
       });
 
-      // 台帳に伝票番号を追記（伝票番号ありの行だけ labeled 化）
+      // Firestoreに伝票番号を記録
       for (let i = 0; i < valid.length; i += 400) {
         const batch = db.batch();
         for (const r of valid.slice(i, i + 400)) {
@@ -481,7 +582,6 @@ app.post(
             trackingNumber: r.tracking,
             labeledAt: new Date(),
           };
-          // 既に発送済みなら status は据え置き（出荷実績を壊さない）
           if (statusByFo.get(r.foId) !== "fulfilled") data.status = "labeled";
           batch.set(db.collection("shipments").doc(r.foId), data, {
             merge: true,
@@ -490,38 +590,7 @@ app.post(
         await batch.commit();
       }
 
-      // 掃除: 今回の取込は Yamato 発行済み(全件)。今回 labeled にならなかった
-      // generated は「実際には発行しなかった残骸」なので削除する。
-      // （伝票番号を持つものは安全弁で除外＝labeled/fulfilled は消えない）
-      const uploaded = new Set(rows.map((r) => r.foId));
-      const genSnap = await db
-        .collection("shipments")
-        .where("status", "==", "generated")
-        .get();
-      const staleGenerated = genSnap.docs.filter((d) => {
-        if (uploaded.has(d.id)) return false; // 今回取り込んだものは対象外
-        const t = (d.data() as any).trackingNumber;
-        return t === undefined || t === null || String(t).trim() === "";
-      });
-      let cleaned = 0;
-      for (let i = 0; i < staleGenerated.length; i += 400) {
-        const batch = db.batch();
-        for (const d of staleGenerated.slice(i, i + 400)) batch.delete(d.ref);
-        await batch.commit();
-        cleaned += Math.min(400, staleGenerated.length - i);
-      }
-
-      const { csv, count, missing } = await buildStickerCsv(valid);
-      const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-      res.json({
-        ok: true,
-        count,
-        missing,
-        cleaned,
-        failed,
-        filename: `sticker-${stamp}.csv`,
-        csvBase64: Buffer.from(csv, "utf-8").toString("base64"),
-      });
+      res.json({ ok: true, count: valid.length, failed });
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error.message });
@@ -566,6 +635,7 @@ app.post("/api/fulfill", requireAuth, async (req: Request, res: Response) => {
 export const api = onRequest(
   {
     invoker: "public",
+    region: "asia-northeast1",
     secrets: [
       SHOPIFY_CLIENT_ID,
       SHOPIFY_CLIENT_SECRET,

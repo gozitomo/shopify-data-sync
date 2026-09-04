@@ -5,26 +5,14 @@ import { parseCsv } from "~/lib/csv";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 
 const API_BASE = import.meta.env.PROD ? "" : "http://localhost:8080";
-const STICKER_URL = `${API_BASE}/api/sticker-csv`;
+const IMPORT_B2_URL = `${API_BASE}/api/import-b2`;
 
 // B2発行済みCSVの列インデックス
 const COL_FOID = 0; // お客様管理番号 = FO id
 const COL_TRACKING = 3; // 伝票番号
 const COL_ORDER = 75; // 検索キー1 = 注文番号
 
-function downloadBase64Csv(b64: string, filename: string) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: "text/csv" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-type Failed = { foId: string; tracking: string; orderName: string };
+type Failed = { foId: string; orderName: string };
 
 export default function ImportShipments() {
   const [loading, setLoading] = useState(false);
@@ -60,7 +48,7 @@ export default function ImportShipments() {
       }
 
       const token = await getIdToken();
-      const res = await fetch(STICKER_URL, {
+      const res = await fetch(IMPORT_B2_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -71,15 +59,7 @@ export default function ImportShipments() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
 
-      downloadBase64Csv(data.csvBase64, data.filename);
-      let msg = `${data.count}件のシールCSVを出力しました。`;
-      if (data.cleaned > 0) {
-        msg += ` 未発行のまま残っていた伝票データ ${data.cleaned}件を整理しました。`;
-      }
-      if (data.missing?.length) {
-        msg += ` ※Shopifyで見つからなかったFO: ${data.missing.length}件（${data.missing.slice(0, 5).join(", ")}…）`;
-      }
-      setMessage(msg);
+      setMessage(`${data.count}件の伝票番号を記録しました。`);
       if (data.failed?.length) setFailed(data.failed);
     } catch (e: any) {
       setError(e?.message || String(e));
@@ -133,8 +113,7 @@ export default function ImportShipments() {
           <CardContent className="space-y-1 text-sm">
             {failed.map((f) => (
               <div key={f.foId} className="text-destructive">
-                FOID: {f.foId} / 伝票番号: {f.tracking || "（空）"} /
-                データ取込みできませんでした。
+                FOID: {f.foId} / 注文: {f.orderName} / データ取込みできませんでした。
               </div>
             ))}
           </CardContent>

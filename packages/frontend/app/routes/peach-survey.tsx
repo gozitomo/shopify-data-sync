@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { getIdToken } from "~/lib/firebase";
+// 社内(/peach-survey)・共有(/share/peach)どちらからも使われる画面のため、
+// ドメイン限定ではないトークン取得を使う（閲覧可否はAPI側の許可リストで判定）。
+import { getIdTokenAny as getIdToken } from "~/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   Radar,

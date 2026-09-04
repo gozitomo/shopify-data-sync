@@ -14,5 +14,10 @@ export default [
     route("import-shipments", "routes/import-shipments.tsx"),
     route("shipped", "routes/shipped.tsx"),
     route("peach-survey", "routes/peach-survey.tsx"),
+    route("settings", "routes/settings.tsx"),
+  ]),
+  // 共有ページ: ドメイン外の許可リストの人も閲覧可（サイドバー無し）。
+  layout("layouts/peach-share.tsx", [
+    route("share/peach", "routes/peach-share.tsx"),
   ]),
 ] satisfies RouteConfig;
