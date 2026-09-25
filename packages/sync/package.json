@@ -27,7 +27,8 @@
     "@google-cloud/firestore": "^8.5.0",
     "@shopify-data-sync/shared": "*",
     "dotenv": "^17.4.2",
-    "iconv-lite": "^0.4.24"
+    "iconv-lite": "^0.4.24",
+    "playwright": "^1.63.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

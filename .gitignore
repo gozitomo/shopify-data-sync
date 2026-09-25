@@ -145,5 +145,12 @@ vite.config.ts.timestamp-*
 packages/sync/unfulfilled-*.csv
 packages/sync/b2-*.csv
 
+# ながまるWEBサービスの診断用ダウンロード物(実データを含むためコミット禁止)
+packages/sync/nagamaru-*.png
+packages/sync/nagamaru-*.pdf
+
 # その場限りのスクラッチスクリプト
 **/*.local.ts
+
+# local用のファイル
+local
