@@ -75,3 +75,8 @@ export {
   extractNagamaruInvoiceText,
   parseNagamaruInvoiceText,
 } from "./nagamaru-invoice-pdf.js";
+export {
+  type ClassificationExample,
+  type ClassificationResult,
+  classifyInvoiceItems,
+} from "./gemini-classify.js";
