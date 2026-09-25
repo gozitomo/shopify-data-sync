@@ -80,3 +80,8 @@ export {
   type ClassificationResult,
   classifyInvoiceItems,
 } from "./gemini-classify.js";
+export {
+  type DriveFile,
+  listFilesInFolder,
+  downloadDriveFile,
+} from "./google-drive.js";
