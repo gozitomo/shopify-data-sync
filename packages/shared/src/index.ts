@@ -50,3 +50,22 @@ export {
   saveRefreshTokenToEnvFile,
   saveRefreshTokenToSecretManager,
 } from "./moneyforward-token-store.js";
+export {
+  type MoneyForwardJournal,
+  type MoneyForwardJournalBranch,
+  type MoneyForwardJournalBranchSide,
+  type JournalizeTransactionParams,
+  findJournalByTransactionId,
+  journalizeTransaction,
+} from "./moneyforward-journals.js";
+export {
+  type MoneyForwardTransaction,
+  type FindMatchingTransactionParams,
+  findMatchingTransaction,
+} from "./moneyforward-transactions.js";
+export { decodeMoneyForwardId, encodeMoneyForwardId } from "./moneyforward-ids.js";
+export {
+  type VoucherFile,
+  type VoucherFileId,
+  attachVouchers,
+} from "./moneyforward-vouchers.js";
