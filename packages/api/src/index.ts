@@ -19,6 +19,10 @@ import {
   fetchPeachSurveyRows,
   parsePeachSurveyRows,
   summarizePeachSurvey,
+  fetchHarvestRows,
+  parseHarvestRows,
+  summarizeHarvest,
+  type HarvestSummary,
 } from "@shopify-data-sync/shared";
 import { validateAddresses } from "./address-validate";
 import { fulfillByTracking } from "./fulfill";
@@ -128,11 +132,12 @@ app.get("/api/stats", requireAuth, async (req: Request, res: Response) => {
     const currentYear = new Date().getFullYear();
 
     try {
-      // 1. 商品マスタの取得
-      const productsRes = await db.collection("products").get();
+      // 1. 商品マスタ・2. 注文実績を並列取得（互いに独立なので直列にしない）
+      const [productsRes, ordersRes] = await Promise.all([
+        db.collection("products").get(),
+        db.collection("orders").get(),
+      ]);
       const productItems = productsRes.docs.map((doc) => doc.data() as Product);
-      // 2. 注文実績の取得
-      const ordersRes = await db.collection("orders").get();
       const ordersItems = ordersRes.docs.map((doc) => doc.data() as Order);
       console.log(
         `3. データ取得完了！ 商品:${productsRes.size}件, 注文:${ordersRes.size}件`,
@@ -255,6 +260,36 @@ app.get(
   },
 );
 
+// 収穫記録（アグリノート同期スプシ）を日次バケットに集計して返す。
+// 圃場/作物/年の絞り込みと「収穫開始日=0日目」の計算は画面側で行うため、ここは日次までに留める。
+// スプシ全件取得は毎回1〜2秒かかるので、インスタンス内で10分キャッシュする（?refresh=1 で無効化）。
+const HARVEST_CACHE_MS = 10 * 60 * 1000;
+let harvestCache: { at: number; data: HarvestSummary } | null = null;
+
+app.get(
+  "/api/harvest-summary",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const fresh =
+        req.query.refresh === "1" ||
+        harvestCache === null ||
+        Date.now() - harvestCache.at > HARVEST_CACHE_MS;
+      if (fresh) {
+        const rows = await fetchHarvestRows();
+        harvestCache = {
+          at: Date.now(),
+          data: summarizeHarvest(parseHarvestRows(rows)),
+        };
+      }
+      res.json(harvestCache!.data);
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
 // 桃アンケート共有ユーザー(許可リスト)の管理 — 社内(ドメイン)のみ操作可
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -287,7 +322,9 @@ app.post(
         .trim()
         .toLowerCase();
       if (!EMAIL_RE.test(email)) {
-        res.status(400).json({ error: "メールアドレスの形式が正しくありません" });
+        res
+          .status(400)
+          .json({ error: "メールアドレスの形式が正しくありません" });
         return;
       }
       await db
@@ -346,32 +383,28 @@ app.get(
 );
 
 // SKU区分(グループ)一覧: products から「最後の-セグメントを除いた区分」を重複排除して返す
-app.get(
-  "/api/sku-groups",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    try {
-      const snap = await db.collection("products").get();
-      const map = new Map<string, string>(); // group -> 代表商品名
-      for (const doc of snap.docs) {
-        const p = doc.data() as Product;
-        // 販売中(ACTIVE)のみ。古い商品(ARCHIVED)・下書き(DRAFT)・
-        // デジタル商品(D-始まり=発送しない)は除外
-        if (!p.sku || p.status !== "ACTIVE" || p.sku.startsWith("D-")) continue;
-        const group = getSkuCategory(p.sku);
-        if (!group) continue;
-        if (!map.has(group)) map.set(group, p.product_name ?? "");
-      }
-      const groups = [...map.entries()]
-        .map(([group, productName]) => ({ group, productName }))
-        .sort((a, b) => a.productName.localeCompare(b.productName, "ja"));
-      res.json({ groups });
-    } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+app.get("/api/sku-groups", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const snap = await db.collection("products").get();
+    const map = new Map<string, string>(); // group -> 代表商品名
+    for (const doc of snap.docs) {
+      const p = doc.data() as Product;
+      // 販売中(ACTIVE)のみ。古い商品(ARCHIVED)・下書き(DRAFT)・
+      // デジタル商品(D-始まり=発送しない)は除外
+      if (!p.sku || p.status !== "ACTIVE" || p.sku.startsWith("D-")) continue;
+      const group = getSkuCategory(p.sku);
+      if (!group) continue;
+      if (!map.has(group)) map.set(group, p.product_name ?? "");
     }
-  },
-);
+    const groups = [...map.entries()]
+      .map(([group, productName]) => ({ group, productName }))
+      .sort((a, b) => a.productName.localeCompare(b.productName, "ja"));
+    res.json({ groups });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // 出荷実績サマリ: fulfilled の shipments を日付(JST)ごとに集計し、SKU別出荷個数を返す
 app.get(
@@ -379,8 +412,11 @@ app.get(
   requireAuth,
   async (req: Request, res: Response) => {
     try {
-      // products: sku -> 表示名（商品名 + バリアント(荷姿)）
-      const prodSnap = await db.collection("products").get();
+      // products(sku -> 表示名) と shipments(fulfilled分) は互いに独立なので並列取得
+      const [prodSnap, shipSnap] = await Promise.all([
+        db.collection("products").get(),
+        db.collection("shipments").where("status", "==", "fulfilled").get(),
+      ]);
       const nameBySku = new Map<string, string>();
       for (const doc of prodSnap.docs) {
         const p = doc.data() as Product;
@@ -391,11 +427,6 @@ app.get(
             : "";
         nameBySku.set(p.sku, `${p.product_name ?? ""}${variant}`.trim());
       }
-
-      const shipSnap = await db
-        .collection("shipments")
-        .where("status", "==", "fulfilled")
-        .get();
 
       const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" });
       // 日付ごとに SKU別箱数(skus) と 荷物件数(parcels=伝票数) を集計する。
@@ -427,7 +458,11 @@ app.get(
           parcels: e.parcels,
           total: [...e.skus.values()].reduce((a, b) => a + b, 0),
           rows: [...e.skus.entries()]
-            .map(([sku, qty]) => ({ sku, name: nameBySku.get(sku) ?? sku, qty }))
+            .map(([sku, qty]) => ({
+              sku,
+              name: nameBySku.get(sku) ?? sku,
+              qty,
+            }))
             .sort((a, b) => a.name.localeCompare(b.name, "ja")),
         }));
 
@@ -525,78 +560,73 @@ app.post("/api/export-b2", requireAuth, async (req: Request, res: Response) => {
   }
 });
 
-
 // B2発行済みCSV取込: 伝票番号をFirestoreに記録（シールCSVは生成しない）
-app.post(
-  "/api/import-b2",
-  requireAuth,
-  async (req: Request, res: Response) => {
-    try {
-      const raw = Array.isArray(req.body?.rows) ? req.body.rows : [];
-      const byFo = new Map<
-        string,
-        { foId: string; tracking: string; orderName: string }
-      >();
-      for (const r of raw) {
-        const foId = String(r?.foId ?? "").trim();
-        if (!foId) continue;
-        byFo.set(foId, {
-          foId,
-          tracking: String(r?.tracking ?? "").trim(),
-          orderName: String(r?.orderName ?? "").trim(),
+app.post("/api/import-b2", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const raw = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    const byFo = new Map<
+      string,
+      { foId: string; tracking: string; orderName: string }
+    >();
+    for (const r of raw) {
+      const foId = String(r?.foId ?? "").trim();
+      if (!foId) continue;
+      byFo.set(foId, {
+        foId,
+        tracking: String(r?.tracking ?? "").trim(),
+        orderName: String(r?.orderName ?? "").trim(),
+      });
+    }
+    const rows = [...byFo.values()];
+    if (rows.length === 0) {
+      res.status(400).json({ error: "有効な行がありません" });
+      return;
+    }
+
+    // 既存statusを取得（発送済みは labeled に戻さない）
+    const statusByFo = new Map<string, string | undefined>();
+    for (let i = 0; i < rows.length; i += 300) {
+      const refs = rows
+        .slice(i, i + 300)
+        .map((r) => db.collection("shipments").doc(r.foId));
+      const snaps = await db.getAll(...refs);
+      for (const s of snaps) statusByFo.set(s.id, s.data()?.status);
+    }
+
+    // 伝票番号が空の行は失敗扱い
+    const failed: { foId: string; orderName: string }[] = [];
+    const valid = rows.filter((r) => {
+      if (!r.tracking) {
+        failed.push({ foId: r.foId, orderName: r.orderName });
+        return false;
+      }
+      return true;
+    });
+
+    // Firestoreに伝票番号を記録
+    for (let i = 0; i < valid.length; i += 400) {
+      const batch = db.batch();
+      for (const r of valid.slice(i, i + 400)) {
+        const data: any = {
+          foId: r.foId,
+          orderName: r.orderName,
+          trackingNumber: r.tracking,
+          labeledAt: new Date(),
+        };
+        if (statusByFo.get(r.foId) !== "fulfilled") data.status = "labeled";
+        batch.set(db.collection("shipments").doc(r.foId), data, {
+          merge: true,
         });
       }
-      const rows = [...byFo.values()];
-      if (rows.length === 0) {
-        res.status(400).json({ error: "有効な行がありません" });
-        return;
-      }
-
-      // 既存statusを取得（発送済みは labeled に戻さない）
-      const statusByFo = new Map<string, string | undefined>();
-      for (let i = 0; i < rows.length; i += 300) {
-        const refs = rows
-          .slice(i, i + 300)
-          .map((r) => db.collection("shipments").doc(r.foId));
-        const snaps = await db.getAll(...refs);
-        for (const s of snaps) statusByFo.set(s.id, s.data()?.status);
-      }
-
-      // 伝票番号が空の行は失敗扱い
-      const failed: { foId: string; orderName: string }[] = [];
-      const valid = rows.filter((r) => {
-        if (!r.tracking) {
-          failed.push({ foId: r.foId, orderName: r.orderName });
-          return false;
-        }
-        return true;
-      });
-
-      // Firestoreに伝票番号を記録
-      for (let i = 0; i < valid.length; i += 400) {
-        const batch = db.batch();
-        for (const r of valid.slice(i, i + 400)) {
-          const data: any = {
-            foId: r.foId,
-            orderName: r.orderName,
-            trackingNumber: r.tracking,
-            labeledAt: new Date(),
-          };
-          if (statusByFo.get(r.foId) !== "fulfilled") data.status = "labeled";
-          batch.set(db.collection("shipments").doc(r.foId), data, {
-            merge: true,
-          });
-        }
-        await batch.commit();
-      }
-
-      res.json({ ok: true, count: valid.length, failed });
-    } catch (error: any) {
-      console.error(error);
-      res.status(500).json({ error: error.message });
+      await batch.commit();
     }
-  },
-);
+
+    res.json({ ok: true, count: valid.length, failed });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // データ同期: 注文・商品の Cloud Run Job を起動（バックグラウンドで実行）
 app.post(

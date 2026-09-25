@@ -14,6 +14,7 @@ export default [
     route("import-shipments", "routes/import-shipments.tsx"),
     route("shipped", "routes/shipped.tsx"),
     route("peach-survey", "routes/peach-survey.tsx"),
+    route("harvest", "routes/harvest.tsx"),
     route("settings", "routes/settings.tsx"),
   ]),
   // 共有ページ: ドメイン外の許可リストの人も閲覧可（サイドバー無し）。

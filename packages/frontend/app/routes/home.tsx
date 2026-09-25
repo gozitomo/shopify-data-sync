@@ -57,7 +57,9 @@ function SyncOrdersButton() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setMessage("更新を開始しました。数分後にページを再読み込みしてください。");
+      setMessage(
+        "更新を開始しました。数分後にページを再読み込みしてください。",
+      );
     } catch (e: any) {
       setMessage(`エラー: ${e?.message || e}`);
     } finally {
@@ -212,11 +214,14 @@ function InventoryCard({
       </CardHeader>
       <CardContent className="p-0">
         <Table containerClassName="md:overflow-x-visible">
-          <TableHeader className="sticky top-[72px] z-[5] bg-background shadow-sm">
+          <TableHeader className="md:sticky md:top-[72px] md:z-[5] bg-background shadow-sm">
             <TableRow>
               {nameColumns ? (
                 nameColumns.map((col, i) => (
-                  <TableHead key={col.header} className={i === 0 ? "w-[220px]" : ""}>
+                  <TableHead
+                    key={col.header}
+                    className={i === 0 ? "w-[220px]" : ""}
+                  >
                     {col.header}
                   </TableHead>
                 ))
@@ -242,115 +247,97 @@ function InventoryCard({
                 </TableCell>
               </TableRow>
             ) : (
-              categories.flatMap(([category, categoryData]: any) => [
-                // カテゴリ行（小計行）
-                <TableRow
-                  key={category}
-                  className="bg-secondary/30 hover:bg-secondary/30 font-bold"
-                >
-                  <TableCell colSpan={nameColCount}>
-                    <span className="flex items-center gap-2">
-                      📂 {category}
-                    </span>
-                  </TableCell>
-                  <TableCell />
-                  <TableCell className="text-right">
-                    {categoryData.totalWeight}kg
-                  </TableCell>
-                  <TableCell colSpan={4} />
-                </TableRow>,
+              categories.flatMap(([, categoryData]: any) =>
                 // 商品データ行
-                ...categoryData.rows.map(
+                categoryData.rows.map(
                   (row: any, rowIdx: number, rowsArr: any[]) => {
                     const prev = rowIdx > 0 ? rowsArr[rowIdx - 1] : null;
                     return (
-                  <TableRow
-                    key={row.sku}
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => {
-                      window.open(
-                        `https://admin.shopify.com/store/pgfarmco/products/${row.pId}/variants/${row.id}`,
-                      );
-                    }}
-                  >
-                    {nameColumns ? (
-                      nameColumns.map((col, i) => {
-                        // 直前行と、この列＋上位のcollapse列がすべて一致すれば空欄化。
-                        const blank =
-                          !!col.collapse &&
-                          !!prev &&
-                          nameColumns.every(
-                            (c, k) =>
-                              k > i ||
-                              !c.collapse ||
-                              c.get(row) === c.get(prev),
+                      <TableRow
+                        key={row.sku}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => {
+                          window.open(
+                            `https://admin.shopify.com/store/pgfarmco/products/${row.pId}/variants/${row.id}`,
                           );
-                        return (
-                        <TableCell
-                          key={col.header}
-                          className={
-                            i === 0
-                              ? "font-medium text-sm"
-                              : "text-sm"
-                          }
-                        >
-                          {blank ? "" : col.get(row)}
-                        </TableCell>
-                        );
-                      })
-                    ) : (
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm">
-                            {row.title}
-                          </span>
-                          {row.variantTitle && (
-                            <div className="flex gap-2 text-xs text-muted-foreground">
-                              <span>{row.variantTitle}</span>
+                        }}
+                      >
+                        {nameColumns ? (
+                          nameColumns.map((col, i) => {
+                            // 直前行と、この列＋上位のcollapse列がすべて一致すれば空欄化。
+                            const blank =
+                              !!col.collapse &&
+                              !!prev &&
+                              nameColumns.every(
+                                (c, k) =>
+                                  k > i ||
+                                  !c.collapse ||
+                                  c.get(row) === c.get(prev),
+                              );
+                            return (
+                              <TableCell
+                                key={col.header}
+                                className={
+                                  i === 0 ? "font-medium text-sm" : "text-sm"
+                                }
+                              >
+                                {blank ? "" : col.get(row)}
+                              </TableCell>
+                            );
+                          })
+                        ) : (
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-sm">
+                                {row.title}
+                              </span>
+                              {row.variantTitle && (
+                                <div className="flex gap-2 text-xs text-muted-foreground">
+                                  <span>{row.variantTitle}</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
+                          </TableCell>
+                        )}
 
-                    {/* 引当済み（受注箱） */}
-                    <TableCell
-                      className={`text-right ${row.unshipped > 0 ? "text-destructive font-bold" : ""}`}
-                    >
-                      {row.unshipped.toLocaleString()}
-                    </TableCell>
+                        {/* 引当済み（受注箱） */}
+                        <TableCell
+                          className={`text-right ${row.unshipped > 0 ? "text-destructive font-bold" : ""}`}
+                        >
+                          {row.unshipped.toLocaleString()}
+                        </TableCell>
 
-                    {/* 受注kg */}
-                    <TableCell className="text-right font-medium">
-                      {row.weightValue * row.unshipped}kg
-                    </TableCell>
+                        {/* 受注kg */}
+                        <TableCell className="text-right font-medium">
+                          {row.weightValue * row.unshipped}kg
+                        </TableCell>
 
-                    {/* 余力（販売可能） */}
-                    <TableCell
-                      className={`text-right ${row.inventory < 10 ? "font-bold text-orange-600" : ""}`}
-                    >
-                      {row.inventory.toLocaleString()}
-                    </TableCell>
+                        {/* 余力（販売可能） */}
+                        <TableCell
+                          className={`text-right ${row.inventory < 10 ? "font-bold text-orange-600" : ""}`}
+                        >
+                          {row.inventory.toLocaleString()}
+                        </TableCell>
 
-                    {/* 当年出荷済 */}
-                    <TableCell className="text-right">
-                      {row.currentShipped.toLocaleString()}
-                    </TableCell>
+                        {/* 当年出荷済 */}
+                        <TableCell className="text-right">
+                          {row.currentShipped.toLocaleString()}
+                        </TableCell>
 
-                    {/* 前年実績 */}
-                    <TableCell className="text-right text-muted-foreground">
-                      {row.prevShipped.toLocaleString()}
-                    </TableCell>
+                        {/* 前年実績 */}
+                        <TableCell className="text-right text-muted-foreground">
+                          {row.prevShipped.toLocaleString()}
+                        </TableCell>
 
-                    {/* 前々年実績 */}
-                    <TableCell className="text-right text-muted-foreground">
-                      {row.prepreShipped.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
+                        {/* 前々年実績 */}
+                        <TableCell className="text-right text-muted-foreground">
+                          {row.prepreShipped.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
                     );
                   },
                 ),
-              ])
+              )
             )}
           </TableBody>
         </Table>

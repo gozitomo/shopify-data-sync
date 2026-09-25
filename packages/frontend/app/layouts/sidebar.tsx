@@ -10,10 +10,12 @@ import {
   Boxes,
   ClipboardList,
   FileDown,
+  Loader2,
   LogOut,
   Menu,
   ScanLine,
   Settings,
+  Sprout,
   Star,
   X,
 } from "lucide-react";
@@ -32,6 +34,7 @@ const navItems = [
   },
   { to: "/shipped", label: "出荷実績", icon: ClipboardList, end: false },
   { to: "/peach-survey", label: "桃アンケート", icon: Star, end: false },
+  { to: "/harvest", label: "収穫記録", icon: Sprout, end: false },
   { to: "/settings", label: "設定", icon: Settings, end: false },
 ];
 
@@ -132,7 +135,7 @@ export default function SidebarLayout() {
       {/* サイドバー（モバイルは引き出し、PCは常時表示） */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r bg-muted/30 p-4 transition-transform md:static md:z-auto md:w-56 md:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r bg-muted/90 p-4 transition-transform md:static md:z-auto md:w-56 md:translate-x-0",
           menuOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -153,17 +156,28 @@ export default function SidebarLayout() {
               to={to}
               end={end}
               onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
+              className={({ isActive, isPending }) =>
                 cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
+                  isActive || isPending
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )
               }
             >
-              <Icon className="h-4 w-4" />
-              {label}
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                  {label}
+                  {isPending && (
+                    <span className="ml-auto text-xs opacity-80">読込中</span>
+                  )}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -182,7 +196,7 @@ export default function SidebarLayout() {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 pt-14 md:pt-0">
+      <main className="min-w-0 flex-1 px-2 pt-14 md:pt-0">
         <Outlet />
       </main>
     </div>

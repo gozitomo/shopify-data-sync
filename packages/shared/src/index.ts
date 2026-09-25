@@ -25,4 +25,18 @@ export {
   PEACH_SHEET_GID,
 } from "./peach-sheet.js";
 export { buildRadarChartUrl } from "./peach-chart.js";
-export { postSlackWebhook, buildPeachDigestMessage } from "./slack-webhook.js";
+export {
+  type HarvestRecord,
+  type HarvestField,
+  type HarvestDay,
+  type HarvestSummary,
+  parseHarvestRows,
+  summarizeHarvest,
+  normalizeCrop,
+  toYmd,
+} from "./harvest.js";
+export {
+  fetchHarvestRows,
+  HARVEST_SPREADSHEET_ID,
+  HARVEST_SHEET_GID,
+} from "./harvest-sheet.js";
